@@ -1,0 +1,235 @@
+# For the complete swagger spec, go here: https://goo.gl/ArFXhH
+swagger: '2.0'
+info:
+  title: Flask Serverless Example API
+  description: >
+    # Flask Serverless Example API
+
+    These API are used for interacting with information in the system in
+    compliance with standard REST specifications.
+
+  version: "1.0.0"
+
+host: api.example.com
+schemes:
+  - https
+basePath: /
+produces:
+  - application/json
+consumes:
+  - application/json
+paths:
+  # API endpoint for retrieving an authentication token
+  /api/login:
+    post:
+      tags:
+        - external-api
+      summary: Retrieve user token
+      parameters:
+      - in: body
+        name: body
+        description: "User authentication request details"
+        required: true
+        schema:
+          $ref: "#/definitions/AuthRequest"
+      responses:
+        200:
+          description: Auth token for the API user
+          schema:
+            $ref: '#/definitions/AuthResponse'
+        401:
+          description: Invalid username and password combination
+        422:
+          description: Missing parameters, user not found, or account locked
+
+  /todos:
+    get:
+      tags:
+        - todos
+      summary: Returns a list of all the organizations in the system
+      responses:
+        200:
+          description: Paged object of organizations
+          schema:
+            $ref: '#/definitions/PagedTodo'
+        401:
+          description: Authentication error
+          schema:
+            $ref: '#/definitions/AuthError'
+    post:
+      tags:
+        - todos
+      summary: Updates a todo items in the system
+      parameters:
+      - in: body
+        name: body
+        description: >
+          Todo item request details
+        required: true
+        schema:
+          $ref: "#/definitions/TodoRequest"
+      responses:
+        201:
+          description: The update request was successful
+          schema:
+            $ref: '#/definitions/TodoResponse'
+        401:
+          description: Authentication error
+          schema:
+            $ref: '#/definitions/AuthError'
+        422:
+          description: Todo record does not exist in the system
+
+  /todos/<todo_id>:
+    get:
+      tags:
+        - todos
+      summary: Returns the details for an organization
+      parameters:
+      - in: path
+        name: todo_id
+        description: >
+          Todo ID
+        required: true
+        type: string
+      responses:
+        200:
+          description: Todo item details
+          schema:
+            $ref: '#/definitions/TodoResponse'
+        401:
+          description: Authentication error
+          schema:
+            $ref: '#/definitions/AuthError'
+        422:
+          description: Todo record does not exist in the system
+    put:
+      tags:
+      - todos
+      summary: Updates the contents of a todo item
+      parameters:
+      - in: path
+        name: todo_id
+        description: >
+          Todo ID
+        required: true
+        type: string
+      - in: body
+        name: body
+        description: >
+          Todo item request details
+        required: true
+        schema:
+          $ref: "#/definitions/TodoRequest"
+      responses:
+        201:
+          description: The update request was successful
+          schema:
+            $ref: '#/definitions/TodoResponse'
+        401:
+          description: Authentication error
+          schema:
+            $ref: '#/definitions/AuthError'
+        422:
+          description: Todo record does not exist in the system
+
+
+definitions:
+  AuthRequest:
+    description: >
+      Request object that includes user details for authentication
+    type: object
+    required:
+      - username
+      - password
+    properties:
+      username:
+        type: string
+        description: Username of the system user
+      password:
+        type: string
+        description: Password of the system user
+
+  AuthResponse:
+    description: >
+      Response object that includes an auth token for the API user
+    type: object
+    properties:
+       authToken:
+          type: string
+          readOnly: true
+
+  AuthError:
+    description: >
+      Response received when an authorization error has occured. This can be
+      received when:
+      * a malformed or expired Authorization token is submitted
+      * the user is requesting an unauthorized route
+    type: object
+    properties:
+      code:
+        type: string
+        enum:
+          - error.jwt.expired
+          - error.jwt.invalid_signature
+      message:
+        type: string
+
+  TodoRequest:
+    description: >
+      Request object that includes details for registering a new todo item
+    type: object
+    required:
+      - title
+    properties:
+      title:
+        type: string
+        description: Title for the todo item
+      description:
+        type: string
+        description: Description of the todo item
+
+  TodoResponse:
+    description: >
+      Response object that includes basic details of the todo item
+    type: object
+    properties:
+      id:
+        type: string
+        description: ID of the todo item as a UUID
+      title:
+        type: string
+        description: Title for the todo item
+      description:
+        type: string
+        description: Description of the todo item
+      is_completed:
+        type: boolean
+        readOnly: true
+
+  PageLinks:
+      description: >
+        Links included in paged responses for navigation
+      type: object
+      properties:
+        next_page:
+          type: string
+
+  PagedTodo:
+    description: >
+      Page of todo item resources
+    type: object
+    properties:
+      objects:
+        type: array
+        description: Organizations array for page
+        items:
+          $ref: '#/definitions/TodoResponse'
+      page:
+        type: integer
+        description: Current page
+      size:
+        type: integer
+        description: Size of the page
+      _links:
+        $ref: '#/definitions/PageLinks'

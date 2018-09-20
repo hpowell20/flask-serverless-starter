@@ -1,0 +1,35 @@
+account_id: TODO
+record_set_name: dev-api.example.com
+dynamo_host: null
+
+# Cognito Settings
+user_pool_arn: TODO
+user_pool_id: TODO
+app_client_id: TODO
+
+# SES Settings
+hosted_zone_name: example.com.
+verification_email_recipient: no-reply@example.com
+
+logging:
+  version: 1
+  formatters:
+    default:
+      format: '[%(asctime)s][%(name)s][%(levelname)s]: %(message)s'
+
+  handlers:
+    console:
+      class: logging.StreamHandler
+      formatter: default
+      stream: ext://sys.stdout
+
+  loggers:
+    core:
+      level: DEBUG
+    services:
+      level: DEBUG
+
+  root:
+    level: INFO
+    handlers:
+      - console
