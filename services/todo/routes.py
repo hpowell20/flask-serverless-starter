@@ -1,6 +1,4 @@
-import uuid
-
-from core import errors
+from core import db, errors
 from datetime import datetime
 from flask import Blueprint, jsonify
 from webargs.flaskparser import use_kwargs
@@ -27,11 +25,8 @@ def list_todo_items():
 @blueprint.route('/todos', methods=["POST"])
 @use_kwargs(todo_schema, locations=('json',))
 def add_todo_item(**kwargs):
-    todo_item = TodoModel(id=str(uuid.uuid4()),
-                          title=kwargs['title'],
-                          description=kwargs['description'])
-
-    todo_item.save()
+    todo_item = TodoModel(**kwargs)
+    db.save_with_unique_id(todo_item)
 
     response = jsonify(todo_schema.dump(todo_item).data)
     response.status_code = 201
@@ -63,11 +58,11 @@ def update_organization(todo_id, **kwargs):
 
 
 def retrieve_todo(todo_id):
-    '''
-
+    """
+    Return a record from the database based on the id specified
     :param todo_id:
     :return:
-    '''
+    """
     try:
         return TodoModel.get(hash_key=todo_id)
     except TodoModel.DoesNotExist:

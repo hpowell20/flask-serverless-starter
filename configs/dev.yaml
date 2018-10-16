@@ -1,11 +1,7 @@
 account_id: TODO
-record_set_name: dev-api.example.com
+domain_name: dev-api.example.com
 dynamo_host: null
-
-# Cognito Settings
-user_pool_arn: TODO
-user_pool_id: TODO
-app_client_id: TODO
+deletion_policy: Delete
 
 # SES Settings
 hosted_zone_name: example.com.
