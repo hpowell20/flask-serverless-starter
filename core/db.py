@@ -23,6 +23,7 @@ def init_models(service_name, stage, host=None):
         entity_type = 'index' if isinstance(model, indexes.Index) else 'table'
         logger.debug("Init %s model '%s'", entity_type, model.Meta.index_name)
 
+
 def save_with_unique_id(item):
     """
     Save a record in the database using a unique identifier value
