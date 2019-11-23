@@ -19,7 +19,7 @@ def init_settings():
 
     if os.path.exists(config_file):
         with open(config_file) as f:
-            utils.deep_merge(yaml.load(f), settings)
+            utils.deep_merge(yaml.load(f, Loader=yaml.FullLoader), settings)
     else:
         print("File doesn't exist: %s" % config_file)
 
@@ -36,3 +36,15 @@ def get_setting(name):
 
 def set_setting(name, value):
     settings[name] = value
+
+
+def get_current_stage():
+    return os.environ['STAGE']
+
+
+def get_service_name():
+    return os.environ['SERVICE_NAME']
+
+
+def get_region_name():
+    return os.environ['AWS_REGION']

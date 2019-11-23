@@ -1,15 +1,42 @@
 service: flask-starter
 
 provider:
-  account_id: ${self:custom.env.account_id}
+  account_id: ${ssm:account-id}
   # The role referenced by cfnRole is created by CloudFormation in
   # advance as; account is used to execute deployments.
   # cfnRole: arn:aws:iam::${self:provider.account_id}:role/serverless_cloudformation
+
+  # How much memory to grant to the Lambda function.  Allocated memory
+  # drives compute capabilities.  The lowest value is 128 MB.  Unless
+  # large amounts of memory are required, you should work with the
+  # lowest value.  If you require more resources consider if you are
+  # building your application correctly with efficient code.
+  #
+  # More information about memory/compute can be found here:
+  # https://goo.gl/g8YjqY
+  memorySize: 128
+  name: aws
+  stage: ${opt:stage}
+  region: ${opt:region}
+  runtime: python3.7
+  deploymentBucket:
+    name: ${self:service}-${self:provider.stage}-serverlessdeploymentbucket
+
+  # The default is 6 seconds. Note: API Gateway current maximum is 30 seconds
+  timeout: 6
+  # Allow for cf "AWS::" variables
+  # See https://goo.gl/atHr7z
+  variableSyntax: "\\${(?!AWS::)([ :a-zA-Z0-9._,\\-\\/\\(\\)]+?)}"
 
   # Add additional environment variables if necessary
   environment:
     SERVICE_NAME: ${self:service}
     STAGE: ${self:provider.stage}
+
+  # Reference external API Gateway definition
+  apiGateway:
+    restApiId: ${cf:${self:service}-apig-${self:provider.stage}.ApiGateway}
+    restApiRootResourceId: ${cf:${self:service}-apig-${self:provider.stage}.ApiGatewayRootResourceId}
 
   # IAM role permissions given to the Lambda function.  Update as
   # needed.  More information about IAM permissions can be found here:
@@ -25,86 +52,69 @@ provider:
         - logs:PutLogEvents
         - xray:PutTelemetryRecords
         - xray:PutTraceSegments
-      Resource: '*'
-
+      Resource:
+        - Fn::Join:
+            - ':'
+            - - 'arn:aws:logs'
+              - Ref: 'AWS::Region'
+              - Ref: 'AWS::AccountId'
+              - 'log-group:/aws/lambda/*:*:*'
     - Effect: Allow
       Action:
-        - cognito-idp:AdminCreateUser
         - cognito-idp:AdminInitiateAuth
-        - cognito-idp:DescribeUserPool
-      Resource: '*'
-
+      Resource:
+        Fn::GetAtt: [CognitoUserPoolUsers, Arn]
     - Effect: Allow
       Action:
         - ses:SendEmail
         - ses:SendRawEmail
-      Resource: '*'
-
+      Resource:
+        - Fn::Join:
+            - ':'
+            - - 'arn:aws:ses'
+              - 'us-east-1' # Ref: 'AWS::Region'
+              - Ref: 'AWS::AccountId'
+              - 'identity/*'
     - Effect: Allow
       Action:
         - dynamodb:DescribeTable
         - dynamodb:GetItem
+        - dynamodb:DeleteItem
         - dynamodb:PutItem
+        - dynamodb:Query
         - dynamodb:Scan
         - dynamodb:UpdateItem
       Resource: arn:aws:dynamodb:*:*:table/${self:service}-${self:provider.stage}*
 
-  # How much memory to grant to the Lambda function.  Allocated memory
-  # drives compute capabilities.  The lowest value is 128 MB.  Unless
-  # large amounts of memory are required, you should work with the
-  # lowest value.  If you require more resources consider if you are
-  # building your application correctly with efficient code.
-  #
-  # More information about memory/compute can be found here:
-  # https://goo.gl/g8YjqY
-  memorySize: 128
-  name: aws
-  region: ca-central-1
-  runtime: python3.7
-  stage: ${opt:stage}
-  # The default is 6 seconds. Note: API Gateway current maximum is 30 seconds
-  timeout: 6
-  # Allow for cf "AWS::" variables
-  # See https://goo.gl/atHr7z
-  variableSyntax: "\\${(?!AWS::)([ :a-zA-Z0-9._,\\-\\/\\(\\)]+?)}"
-
-package:
-  exclude:
-    - node_modules/**
-    - npm-debug.log
-    - package.json
-    - package-lock.json
-    - requirements.txt
-    - venv/**
-
 plugins:
-  - serverless-domain-manager
-  - serverless-plugin-bind-deployment-id
-  - serverless-plugin-scripts
   - serverless-wsgi
 
 custom:
-  customDomain:
-    domainName: ${self:custom.env.domain_name, self:custom.default_domain_name}
-    stage:
-      Ref: Stage
-  default_deletion_policy: Delete
-  default_domain_name: ${self:provider.stage}-api.caringfredericton.com
   env: ${file(configs/${self:provider.stage}.yaml)}
-  scripts:
-    hooks:
-      'after:package:finalize': npm run create_domain -- --stage ${self:provider.stage}
-      'before:remove:remove': npm run delete_domain -- --stage ${self:provider.stage}
+  default_deletion_policy: Delete
   wsgi:
     app: api.app
+
+package:
+  exclude:
+    - ./**
+  include:
+    - api.py
+    - apidocs/**
+    - configs/${self:provider.stage}.yaml
+    - core/**
+    - handlers/**
+    - services/**
 
 functions:
   login:
     name: ${self:service}-${self:provider.stage}-api-login
     handler: handlers/login.handler
     environment:
-      COGNITO_USER_POOL_ID: ${self:custom.env.user_pool_id}
-      COGNITO_CLIENT_ID: ${self:custom.env.app_client_id}
+      COGNITO_USER_POOL_USERS_ID:
+        Ref: CognitoUserPoolUsers
+      COGNITO_USER_POOL_CLIENT_USERS_ID:
+        Ref: CognitoUserPoolClientUsers
     events:
       - http:
           method: POST
@@ -117,9 +127,6 @@ functions:
     events:
       - http:
           method: GET
-          path: /
-      - http:
-          method: GET
           path: /index.html
       - http:
           method: GET
@@ -127,40 +134,30 @@ functions:
 
   api:
     name: ${self:service}-${self:provider.stage}-api
-    handler: wsgi.handler
+    handler: wsgi_handler.handler
+    environment:
+      UI_DOMAIN_NAME: ${self:custom.web_domain_name}
     events:
       - http:
           method: any
           path: /{proxy+}
           cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: CognitoAuthorizer
 
 resources:
   Resources:
-    #===================================================================
-    # API Gateway
-    #===================================================================
-    # This resource is here so we can specifically define methods other
-    # than the default / and /{proxy+} so that they show up in
-    # CloudWatch separately for monitoring purposes.
-    Stage:
-      Type: AWS::ApiGateway::Stage
-      Properties:
-        DeploymentId:
-          Ref: __deployment__
-
-        RestApiId:
-          Ref: ApiGatewayRestApi
-        StageName: ${self:provider.stage}
-
     #===================================================================
     # Cognito
     #===================================================================
     CognitoUserPoolUsers:
       Type: AWS::Cognito::UserPool
-      DeletionPolicy: ${self:custom.env.deletion_policy}
+      DeletionPolicy: ${self:custom.env.deletion_policy, self:custom.default_deletion_policy}
       Properties:
         AdminCreateUserConfig:
-          AllowAdminCreateUserOnly: True
+          AllowAdminCreateUserOnly: False
           InviteMessageTemplate:
             EmailSubject: Your temporary password
             EmailMessage: |
@@ -182,8 +179,8 @@ resources:
           - email
         UserPoolName: ${self:service}-${self:provider.stage}-users
         UserPoolTags:
-            CLIENT: Civic Tech
-            PROJECT: Caring Calendar
+            CLIENT: Client Tag Name
+            PROJECT: Project Tag Name
 
     CognitoUserPoolClientUsers:
       Type: AWS::Cognito::UserPoolClient
@@ -200,35 +197,7 @@ resources:
       Properties:
         IdentitySource: method.request.header.Authorization
         Name: ${self:service}-${self:provider.stage}-users-authorizer
-        RestApiId:
-          Ref: ApiGatewayRestApi
+        RestApiId: ${self:provider.apiGateway.restApiId}
         Type: COGNITO_USER_POOLS
         ProviderARNs:
           - Fn::GetAtt: [CognitoUserPoolUsers, Arn]
-
-    # Augments the compiled function cf json
-    ApiGatewayMethodProxyVarAny:
-      Properties:
-        AuthorizationType: COGNITO_USER_POOLS
-        AuthorizerId:
-          Ref: CognitoAuthorizer
-
-    #===================================================================
-    # DynamoDB
-    #===================================================================
-    TableTodos:
-      Type: AWS::DynamoDB::Table
-      DeletionPolicy: ${self:custom.env.deletion_policy, self:custom.default_deletion_policy}
-      Properties:
-        TableName: ${self:service}-${self:provider.stage}-todos
-        AttributeDefinitions:
-        - AttributeName: id
-          AttributeType: S
-        KeySchema:
-        - AttributeName: id
-          KeyType: HASH
-        BillingMode: PAY_PER_REQUEST
-        SSESpecification:
-          SSEEnabled: True
-
-

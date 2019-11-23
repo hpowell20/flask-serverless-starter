@@ -1,9 +1,10 @@
-from http.client import INTERNAL_SERVER_ERROR, BAD_REQUEST, NOT_FOUND, UNPROCESSABLE_ENTITY
-from werkzeug import exceptions
+from http import HTTPStatus
+
+DEFAULT_ERROR = HTTPStatus.UNPROCESSABLE_ENTITY
 
 
 class HttpError(Exception):
-    status_code = INTERNAL_SERVER_ERROR
+    status_code = HTTPStatus.INTERNAL_SERVER_ERROR.value
     code = 'error.internal_sever_error'
     message = 'Internal server error'
 
@@ -20,18 +21,8 @@ class HttpError(Exception):
         super().__init__(self.message)
 
 
-class ResourceNotFoundError(HttpError):
-    status_code = NOT_FOUND
-    message = 'Resource not found error'
-
-
-class ResourceReadonly(HttpError):
-    status_code = BAD_REQUEST
-    message = 'Resource is read-only'
-
-
-class ResourceValidationError(exceptions.UnprocessableEntity):
-    status_code = UNPROCESSABLE_ENTITY
+class BadRequestError(HttpError):
+    status_code = HTTPStatus.BAD_REQUEST.value
 
     def __init__(self, messages):
         self.data = {'messages': messages}
@@ -41,9 +32,37 @@ class ResourceValidationError(exceptions.UnprocessableEntity):
         return self.data
 
 
-class CognitoError(HttpError):
-    code = 'error.cognito.error'
-    message = 'Cognito error'
+class ResourceConflictError(HttpError):
+    status_code = HTTPStatus.CONFLICT.value
+
+    def __init__(self, messages):
+        self.data = {'messages': messages}
+        super().__init__()
+
+    def to_dict(self):
+        return self.data
+
+
+class ResourceNotFoundError(HttpError):
+    status_code = HTTPStatus.NOT_FOUND.value
+
+    def __init__(self, messages):
+        self.data = {'messages': messages}
+        super().__init__()
+
+    def to_dict(self):
+        return self.data
+
+
+class ResourceValidationError(HttpError):
+    status_code = HTTPStatus.UNPROCESSABLE_ENTITY.value
+
+    def __init__(self, messages):
+        self.data = {'messages': messages}
+        super().__init__()
+
+    def to_dict(self):
+        return self.data
 
 
 class SESError(HttpError):
